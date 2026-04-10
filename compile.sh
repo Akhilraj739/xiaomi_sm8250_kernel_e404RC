@@ -15,21 +15,15 @@ AK3_DIR="$BASE_DIR/AnyKernel3"
 [[ ! -d "$AK3_DIR" ]] && echo "!! Please Provide AnyKernel3 !!" && exit 1
 
 # Parse command line arguments
-TYPE="CI"
+if [[ "$(git rev-parse --abbrev-ref HEAD)" == *bpf* ]]; then
+    TYPE="Weekly-BPF"
+else
+    TYPE="Weekly"
+fi
+
 TC="Unknown-Clang"
 TARGET=""
 DEFCONFIG=""
-
-case "$*" in
-    *st*)
-        git checkout main
-        TYPE="STABLE" ;;
-    *dev*) TYPE="DEV" ;;
-    *sus*) 
-        git checkout main-susfs
-        TYPE="SUSFS" 
-        ;;
-esac
 
 case "$*" in
     *aosp*)
@@ -48,7 +42,7 @@ case "$*" in
         export PATH="$BASE_DIR/toolchains/lilium-clang/bin:$PATH"
         TC="Lilium-Clang"
         ;;
-    *eva*)
+    *evagcc*)
         GCC64_DIR="$BASE_DIR/toolchains/gcc/gcc-arm64/bin/"
         GCC32_DIR="$BASE_DIR/toolchains/gcc/gcc-arm/bin/"
         export PATH="$GCC64_DIR:$GCC32_DIR:/usr/bin:$PATH"
@@ -81,6 +75,18 @@ case "$*" in
 esac
 
 # Device selection using arrays
+if [[ "$*" == *gcc* ]]; then
+    declare -A DEVICE_MAP=(
+        ["munch"]="MUNCH:vendor/munch_gcc_defconfig"
+        ["alioth"]="ALIOTH:vendor/alioth_gcc_defconfig"
+        ["apollo"]="APOLLO:vendor/apollo_gcc_defconfig"
+        ["pipa"]="PIPA:vendor/pipa_gcc_defconfig"
+        ["lmi"]="LMI:vendor/lmi_gcc_defconfig"
+        ["umi"]="UMI:vendor/umi_gcc_defconfig"
+        ["cmi"]="CMI:vendor/cmi_gcc_defconfig"
+        ["cas"]="CAS:vendor/cas_gcc_defconfig"
+    )
+else
     declare -A DEVICE_MAP=(
         ["munch"]="MUNCH:vendor/munch_defconfig"
         ["alioth"]="ALIOTH:vendor/alioth_defconfig"
@@ -91,6 +97,7 @@ esac
         ["cmi"]="CMI:vendor/cmi_defconfig"
         ["cas"]="CAS:vendor/cas_defconfig"
     )
+fi
 
 for device in "${!DEVICE_MAP[@]}"; do
     if [[ "$*" == *"$device"* ]]; then
@@ -111,8 +118,12 @@ K_DTB="$KERNEL_DIR/out/arch/arm64/boot/dtb"
 TELEGRAM_CONFIG="$BASE_DIR/kernel_build"
 if [[ -f "$TELEGRAM_CONFIG" ]]; then
     source "$TELEGRAM_CONFIG"
-    export TOKEN="$TELEGRAM_TOKEN"
-    export CHATID="$TELEGRAM_CHATID"
+    export TOKEN="$BOT_TOKEN"
+    if [[ "$*" == *public* ]]; then
+        export CHATID="$PBID"
+    else
+        export CHATID="$CHID"
+    fi
 else
     echo "-- Warning: Telegram config file not found at $TELEGRAM_CONFIG --"
     echo "-- Telegram notifications will be disabled --"
@@ -126,7 +137,7 @@ export SUBARCH="arm64"
 export TZ="Asia/Jakarta"
 
 # Clean previous builds
-rm -rf ../*E404R*.zip
+rm -rf ../*E404*.zip
 
 # Function definitions
 build_msg() {
@@ -182,7 +193,6 @@ clearbuild() {
 }
 
 zipbuild() {
-    echo "-- Zipping Kernel --"
     cd "$AK3_DIR" || exit 1
     ZIP_NAME="RE404-${TYPE}-${TARGET}-$(date "+%y%m%d").zip"
     zip -r9 "$BASE_DIR/$ZIP_NAME" META-INF/ tools/ "${TARGET}"*-Image "${TARGET}"*-dtb "${TARGET}"*-dtbo.img anykernel.sh
@@ -190,9 +200,7 @@ zipbuild() {
 }
 
 uploadbuild() {
-    send_file "$BASE_DIR/compile.log"
     send_file "$BASE_DIR/$ZIP_NAME"
-    send_msg "<b>Kernel Flashable Zip Uploaded</b>"
 }
 
 setupbuild() {
@@ -251,7 +259,6 @@ setupbuild() {
 }
 
 errorbuild() {
-    echo "-- !! Kernel Build Error !! --"
     send_file "$BASE_DIR/compile.log"
     send_msg "<b>! Kernel Build Error !</b>"
     clearbuild
@@ -277,7 +284,6 @@ makebuild() {
     sed -i '/CONFIG_KALLSYMS=/c\CONFIG_KALLSYMS=n' out/.config
     sed -i '/CONFIG_KALLSYMS_BASE_RELATIVE=/c\CONFIG_KALLSYMS_BASE_RELATIVE=n' out/.config
             
-    echo "-- Compiling Kernel --"
     export CCACHE_DIR="$BASE_DIR/ccache/.ccache_$TC"
 
     compilebuild
@@ -287,7 +293,6 @@ makebuild() {
     ccache -s
     echo "================================"
 
-    echo "-- Copying files to AnyKernel3 --"
     rm -f "$AK3_DIR/${TARGET}-Image"
     rm -f "$AK3_DIR/${TARGET}-dtbo.img"
     rm -f "$AK3_DIR/${TARGET}-dtb"
