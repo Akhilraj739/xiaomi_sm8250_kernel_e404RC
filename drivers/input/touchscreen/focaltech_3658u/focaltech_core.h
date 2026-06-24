@@ -244,6 +244,10 @@ struct fts_ts_data {
 	u8 gesture_cmd;
 	bool gesture_cmd_delay;
 #endif
+	unsigned long last_touch_time[FTS_MAX_POINTS_SUPPORT];
+	int last_state[FTS_MAX_POINTS_SUPPORT];
+	int last_x[FTS_MAX_POINTS_SUPPORT];
+	int last_y[FTS_MAX_POINTS_SUPPORT];
 };
 
 enum GESTURE_MODE_TYPE {
