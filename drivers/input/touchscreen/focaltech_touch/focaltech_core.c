@@ -632,12 +632,12 @@ static int fts_input_report_b(struct fts_ts_data *data)
 			int j;
 			bool skip = false;
 
-			/* ID Fusion: Merge points within 150px (Finger-side contact) */
+			/* ID Fusion: Merge points within 500px (Finger-side/Knuckle contact) */
 			for (j = 0; j < max_touch_num; j++) {
 				if (j != events[i].id && data->last_state[j] == 1) {
 					int dx = abs(events[i].x - data->last_x[j]);
 					int dy = abs(events[i].y - data->last_y[j]);
-					if (dx < 150 && dy < 150) {
+					if (dx < 500 && dy < 500) {
 						skip = true;
 						break;
 					}
@@ -687,7 +687,7 @@ static int fts_input_report_b(struct fts_ts_data *data)
 				data->point_id_changed = false;
 			}
 		} else {
-			int delay = 7; /* Optimized for 6-finger (166Hz/6.02ms) stability and HZ=300 kernel */
+			int delay = 10; /* Heavy Duty stability for 125Hz hardware jitter */
 			if (data->last_state[events[i].id] == 1 &&
 				time_before(jiffies, data->last_touch_time[events[i].id] + msecs_to_jiffies(delay))) {
 				touchs |= BIT(events[i].id);
@@ -711,7 +711,7 @@ static int fts_input_report_b(struct fts_ts_data *data)
 	if (unlikely(data->touchs ^ touchs)) {
 		for (i = 0; i < max_touch_num; i++) {
 			if (BIT(i) & (data->touchs ^ touchs)) {
-				int delay = 7; /* 7ms stability window */
+				int delay = 10; /* Heavy Duty stability window */
 				if (data->last_state[i] == 1 &&
 					time_before(jiffies, data->last_touch_time[i] + msecs_to_jiffies(delay))) {
 					touchs |= BIT(i);
