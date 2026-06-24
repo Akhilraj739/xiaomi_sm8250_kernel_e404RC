@@ -233,6 +233,7 @@ struct fts_ts_data {
 	int last_state[FTS_MAX_POINTS_SUPPORT];
 	int last_x[FTS_MAX_POINTS_SUPPORT];
 	int last_y[FTS_MAX_POINTS_SUPPORT];
+	struct delayed_work release_work;
 };
 
 struct fts_mode_switch {
