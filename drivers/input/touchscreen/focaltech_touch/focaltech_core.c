@@ -54,7 +54,7 @@
 * Private constant and macro definitions using #define
 *****************************************************************************/
 #define FTS_DRIVER_NAME						"fts_ts"
-#define INTERVAL_READ_REG					100	/* unit:ms */
+#define INTERVAL_READ_REG					10	/* unit:ms */
 #define TIMEOUT_READ_REG					2000	/* unit:ms */
 #ifdef FTS_POWER_SOURCE_CUST_EN
 #define FTS_VTG_MIN_UV						2600000
@@ -629,6 +629,37 @@ static int fts_input_report_b(struct fts_ts_data *data)
 		input_mt_slot(data->input_dev, events[i].id);
 
 		if (EVENT_DOWN(events[i].flag)) {
+			int j;
+			bool skip = false;
+
+			/* ID Fusion: Merge points within 150px (Finger-side contact) */
+			for (j = 0; j < max_touch_num; j++) {
+				if (j != events[i].id && data->last_state[j] == 1) {
+					int dx = abs(events[i].x - data->last_x[j]);
+					int dy = abs(events[i].y - data->last_y[j]);
+					if (dx < 150 && dy < 150) {
+						skip = true;
+						break;
+					}
+				}
+			}
+			if (skip) continue;
+
+			/* ID Swap Protection: If touch "teleports" > 1500px, force a new ID */
+			if (data->last_state[events[i].id] == 1) {
+				int dx = abs(events[i].x - data->last_x[events[i].id]);
+				int dy = abs(events[i].y - data->last_y[events[i].id]);
+				if (dx > 1500 || dy > 1500) {
+					input_mt_slot(data->input_dev, events[i].id);
+					input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
+					data->last_state[events[i].id] = 0;
+				}
+			}
+
+			data->last_state[events[i].id] = 1;
+			data->last_touch_time[events[i].id] = jiffies;
+			data->last_x[events[i].id] = events[i].x;
+			data->last_y[events[i].id] = events[i].y;
 			input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, true);
 			if (events[i].area <= 0) {
 				events[i].area = 0x09;
@@ -656,6 +687,19 @@ static int fts_input_report_b(struct fts_ts_data *data)
 				data->point_id_changed = false;
 			}
 		} else {
+			int delay = 7; /* Optimized for 6-finger (166Hz/6.02ms) stability and HZ=300 kernel */
+			if (data->last_state[events[i].id] == 1 &&
+				time_before(jiffies, data->last_touch_time[events[i].id] + msecs_to_jiffies(delay))) {
+				touchs |= BIT(events[i].id);
+				data->touchs |= BIT(events[i].id);
+				input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, true);
+				input_report_abs(data->input_dev, ABS_MT_POSITION_X, data->last_x[events[i].id]);
+				input_report_abs(data->input_dev, ABS_MT_POSITION_Y, data->last_y[events[i].id]);
+				input_report_abs(data->input_dev, ABS_MT_WIDTH_MAJOR, fod_overlap_aera);
+				input_report_abs(data->input_dev, ABS_MT_WIDTH_MINOR, fod_overlap_aera);
+				continue;
+			}
+			data->last_state[events[i].id] = 0;
 			uppoint++;
 			input_mt_report_slot_state(data->input_dev,
 						MT_TOOL_FINGER, false);
@@ -667,7 +711,18 @@ static int fts_input_report_b(struct fts_ts_data *data)
 	if (unlikely(data->touchs ^ touchs)) {
 		for (i = 0; i < max_touch_num; i++) {
 			if (BIT(i) & (data->touchs ^ touchs)) {
+				int delay = 7; /* 7ms stability window */
+				if (data->last_state[i] == 1 &&
+					time_before(jiffies, data->last_touch_time[i] + msecs_to_jiffies(delay))) {
+					touchs |= BIT(i);
+					input_mt_slot(data->input_dev, i);
+					input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, true);
+					input_report_abs(data->input_dev, ABS_MT_POSITION_X, data->last_x[i]);
+					input_report_abs(data->input_dev, ABS_MT_POSITION_Y, data->last_y[i]);
+					continue;
+				}
 				/*FTS_DEBUG("[B]P%d UP!", i); */
+				data->last_state[i] = 0;
 				va_reported = true;
 				input_mt_slot(data->input_dev, i);
 				input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
@@ -2327,6 +2382,14 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	INIT_WORK(&ts_data->suspend_work, fts_suspend_work);
 	INIT_WORK(&ts_data->power_supply_work, fts_power_supply_work);
 	ts_data->is_usb_exist = -1;
+
+	/* Force Always-Awake High Performance Mode & Claw-Edge Optimization */
+	fts_i2c_write_reg(ts_data->client, FTS_REG_MONITOR_MODE, 0x00);
+	fts_i2c_write_reg(ts_data->client, 0x87, 0xFF); /* Maximize Idle Timeout */
+	fts_i2c_write_reg(ts_data->client, FTS_REG_REPORT_RATE, 0x01); /* Force High Report Rate */
+	fts_i2c_write_reg(ts_data->client, FTS_REG_SENSIVITY, 0x28); /* Increased sensitivity (40) */
+	fts_i2c_write_reg(ts_data->client, FTS_REG_THDIFF, 0x30); /* Lower tolerance (48) for thin side-touches */
+	fts_i2c_write_reg(ts_data->client, FTS_REG_EDGE_FILTER_LEVEL, 0x01); /* Disable Edge/Palm rejection */
 
 	ret = fts_irq_registration(ts_data);
 	if (ret) {

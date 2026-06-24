@@ -229,6 +229,10 @@ struct fts_ts_data {
 #endif
 	bool is_tp_testing;
 	int aod_status;
+	unsigned long last_touch_time[FTS_MAX_POINTS_SUPPORT];
+	int last_state[FTS_MAX_POINTS_SUPPORT];
+	int last_x[FTS_MAX_POINTS_SUPPORT];
+	int last_y[FTS_MAX_POINTS_SUPPORT];
 };
 
 struct fts_mode_switch {
