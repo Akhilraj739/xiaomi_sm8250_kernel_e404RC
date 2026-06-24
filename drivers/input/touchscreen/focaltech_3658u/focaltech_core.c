@@ -463,6 +463,33 @@ static int fts_input_report_key(struct fts_ts_data *data, int index)
 	return -EINVAL;
 }
 
+static void fts_release_work_func(struct work_struct *work)
+{
+	struct fts_ts_data *data = container_of(work, struct fts_ts_data, release_work.work);
+	int i;
+	bool va_reported = false;
+
+	mutex_lock(&data->report_mutex);
+	for (i = 0; i < data->pdata->max_touch_number; i++) {
+		if (data->last_state[i] == 1 &&
+			time_after_eq(jiffies, data->last_touch_time[i] + msecs_to_jiffies(10))) {
+			input_mt_slot(data->input_dev, i);
+			input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
+			data->last_state[i] = 0;
+			data->touchs &= ~BIT(i);
+			va_reported = true;
+		}
+	}
+
+	if (va_reported) {
+		if (data->touchs == 0) {
+			input_report_key(data->input_dev, BTN_TOUCH, 0);
+		}
+		input_sync(data->input_dev);
+	}
+	mutex_unlock(&data->report_mutex);
+}
+
 #if FTS_MT_PROTOCOL_B_EN
 static int fts_input_report_b(struct fts_ts_data *data)
 {
@@ -482,6 +509,7 @@ static int fts_input_report_b(struct fts_ts_data *data)
 		input_mt_slot(data->input_dev, events[i].id);
 
 		if (EVENT_DOWN(events[i].flag)) {
+			cancel_delayed_work(&data->release_work);
 			int j;
 			bool skip = false;
 
@@ -539,6 +567,7 @@ static int fts_input_report_b(struct fts_ts_data *data)
 				input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, true);
 				input_report_abs(data->input_dev, ABS_MT_POSITION_X, data->last_x[events[i].id]);
 				input_report_abs(data->input_dev, ABS_MT_POSITION_Y, data->last_y[events[i].id]);
+				queue_delayed_work(data->ts_workqueue, &data->release_work, msecs_to_jiffies(11));
 				continue;
 			}
 			data->last_state[events[i].id] = 0;
@@ -559,6 +588,7 @@ static int fts_input_report_b(struct fts_ts_data *data)
 					input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, true);
 					input_report_abs(data->input_dev, ABS_MT_POSITION_X, data->last_x[i]);
 					input_report_abs(data->input_dev, ABS_MT_POSITION_Y, data->last_y[i]);
+					queue_delayed_work(data->ts_workqueue, &data->release_work, msecs_to_jiffies(11));
 					continue;
 				}
 				data->last_state[i] = 0;
@@ -1501,6 +1531,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 	if (!ts_data->ts_workqueue) {
 		FTS_ERROR("create fts workqueue fail");
 	}
+	INIT_DELAYED_WORK(&ts_data->release_work, fts_release_work_func);
 
 	spin_lock_init(&ts_data->irq_lock);
 	mutex_init(&ts_data->report_mutex);
