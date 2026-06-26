@@ -65,6 +65,7 @@
 * Global variable or extern global variabls/functions
 *****************************************************************************/
 struct fts_ts_data *fts_data;
+static struct xiaomi_touch_interface xiaomi_touch_interfaces;
 
 /*****************************************************************************
 * Static function prototypes
@@ -134,6 +135,10 @@ int fts_wait_tp_to_valid(void)
 void fts_tp_state_recovery(struct fts_ts_data *ts_data)
 {
 	FTS_FUNC_ENTER();
+	/* Force Performance & Lock Sampling Rate */
+	fts_write_reg(FTS_REG_MONITOR_MODE, 0x00); /* Always Active (Kill 52Hz drop) */
+	fts_write_reg(FTS_REG_TIME_ENTER_MONITOR, 0xFF); /* Maximize Idle Timeout */
+	fts_write_reg(FTS_REG_REPORT_RATE, (u8)xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_CUR_VALUE]);
 	/* wait tp stable */
 	fts_wait_tp_to_valid();
 	/* recover TP charger state 0x8B */
@@ -481,10 +486,11 @@ static void fts_release_work_func(struct work_struct *work)
 	mutex_lock(&data->report_mutex);
 	for (i = 0; i < data->pdata->max_touch_number; i++) {
 		if (data->last_state[i] == 1 &&
-			time_after_eq(jiffies, data->last_touch_time[i] + msecs_to_jiffies(10))) {
+			time_after_eq(jiffies, data->last_touch_time[i] + msecs_to_jiffies(7))) {
 			input_mt_slot(data->input_dev, i);
 			input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
 			data->last_state[i] = 0;
+			data->is_released[i] = false;
 			data->touchs &= ~BIT(i);
 			va_reported = true;
 		}
@@ -519,34 +525,22 @@ static int fts_input_report_b(struct fts_ts_data *data)
 
 		if (EVENT_DOWN(events[i].flag)) {
 			cancel_delayed_work(&data->release_work);
-			int j;
-			bool skip = false;
 
-			/* ID Fusion: Merge points within 500px */
-			for (j = 0; j < max_touch_num; j++) {
-				if (j != events[i].id && data->last_state[j] == 1) {
-					int dx = abs(events[i].x - data->last_x[j]);
-					int dy = abs(events[i].y - data->last_y[j]);
-					if (dx < 500 && dy < 500) {
-						skip = true;
-						break;
-					}
-				}
-			}
-			if (skip) continue;
-
-			/* ID Swap Protection: If touch "teleports" > 1500px, force a new ID */
-			if (data->last_state[events[i].id] == 1) {
-				int dx = abs(events[i].x - data->last_x[events[i].id]);
-				int dy = abs(events[i].y - data->last_y[events[i].id]);
-				if (dx > 1500 || dy > 1500) {
-					input_mt_slot(data->input_dev, events[i].id);
-					input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
+			if (data->is_released[events[i].id]) {
+				int dx = events[i].x - data->last_x[events[i].id];
+				int dy = events[i].y - data->last_y[events[i].id];
+				if (dx < 0) dx = -dx;
+				if (dy < 0) dy = -dy;
+				if (dx > 500 || dy > 500) {
+					/* Warp! Kill old and reset slot for new assignment */
+					data->is_released[events[i].id] = false;
 					data->last_state[events[i].id] = 0;
+					continue;
 				}
 			}
 
 			data->last_state[events[i].id] = 1;
+			data->is_released[events[i].id] = false;
 			data->last_touch_time[events[i].id] = jiffies;
 			data->last_x[events[i].id] = events[i].x;
 			data->last_y[events[i].id] = events[i].y;
@@ -577,21 +571,23 @@ static int fts_input_report_b(struct fts_ts_data *data)
 				FTS_DEBUG("[B]P%d DOWN!", events[i].id);
 			}
 		} else {
-			int delay = 10; /* Heavy Duty stability for hardware jitter */
+			int delay = 6; /* Shield Zone active for 6ms (approx 2 hardware cycles) */
 			if (data->last_state[events[i].id] == 1 &&
 				time_before(jiffies, data->last_touch_time[events[i].id] + msecs_to_jiffies(delay))) {
 				touchs |= BIT(events[i].id);
 				data->touchs |= BIT(events[i].id);
+				data->is_released[events[i].id] = true;
 				input_mt_report_slot_state(data->input_dev,
 							   MT_TOOL_FINGER, true);
 				input_report_abs(data->input_dev, ABS_MT_POSITION_X,
 						 data->last_x[events[i].id]);
 				input_report_abs(data->input_dev, ABS_MT_POSITION_Y,
 						 data->last_y[events[i].id]);
-				queue_delayed_work(data->ts_workqueue, &data->release_work, msecs_to_jiffies(11));
+				queue_delayed_work(data->ts_workqueue, &data->release_work, msecs_to_jiffies(7));
 				continue;
 			}
 			data->last_state[events[i].id] = 0;
+			data->is_released[events[i].id] = false;
 			uppoint++;
 			input_mt_report_slot_state(data->input_dev,
 						   MT_TOOL_FINGER, false);
@@ -605,21 +601,23 @@ static int fts_input_report_b(struct fts_ts_data *data)
 	if (unlikely(data->touchs ^ touchs)) {
 		for (i = 0; i < max_touch_num; i++) {
 			if (BIT(i) & (data->touchs ^ touchs)) {
-				int delay = 10; /* Heavy Duty stability window */
+				int delay = 6;
 				if (data->last_state[i] == 1 &&
 					time_before(jiffies, data->last_touch_time[i] + msecs_to_jiffies(delay))) {
 					touchs |= BIT(i);
+					data->is_released[i] = true;
 					input_mt_slot(data->input_dev, i);
 					input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, true);
 					input_report_abs(data->input_dev, ABS_MT_POSITION_X, data->last_x[i]);
 					input_report_abs(data->input_dev, ABS_MT_POSITION_Y, data->last_y[i]);
-					queue_delayed_work(data->ts_workqueue, &data->release_work, msecs_to_jiffies(11));
+					queue_delayed_work(data->ts_workqueue, &data->release_work, msecs_to_jiffies(7));
 					continue;
 				}
 				if (data->log_level >= 1) {
 					FTS_DEBUG("[B]P%d UP!", i);
 				}
 				data->last_state[i] = 0;
+				data->is_released[i] = false;
 				va_reported = true;
 				input_mt_slot(data->input_dev, i);
 				input_mt_report_slot_state(
@@ -1797,12 +1795,16 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 	}
 #endif
 
-	/* Force Always-Awake High Performance Mode & Claw-Edge Optimization */
-	fts_write_reg(FTS_REG_MONITOR_MODE, 0x00);
-	fts_write_reg(0x87, 0xFF); /* Maximize Idle Timeout */
-	fts_write_reg(FTS_REG_SENSIVITY, 0x28); /* Increased sensitivity */
-	fts_write_reg(FTS_REG_THDIFF, 0x30); /* Lower tolerance for thin side-touches */
-	fts_write_reg(FTS_REG_EDGE_FILTER_LEVEL, 0x01); /* Disable Edge rejection */
+	/* High Performance Defaults & Balanced Calibration */
+	fts_write_reg(FTS_REG_MONITOR_MODE, 0x01);
+	fts_write_reg(0x87, 0x0A);
+	/* High Performance Lock & Balanced Calibration */
+	fts_write_reg(FTS_REG_MONITOR_MODE, 0x00); /* Disable 52Hz Sleep */
+	fts_write_reg(FTS_REG_TIME_ENTER_MONITOR, 0xFF);
+	fts_write_reg(FTS_REG_REPORT_RATE, 0x14); /* 333Hz Stable Turbo */
+	fts_write_reg(FTS_REG_SENSIVITY, 0x32);
+	fts_write_reg(FTS_REG_THDIFF, 0x40);
+	fts_write_reg(FTS_REG_EDGE_FILTER_LEVEL, 0x02);
 
 	ret = fts_irq_registration(ts_data);
 	if (ret) {
@@ -2085,7 +2087,6 @@ void fts_update_gesture_state(struct fts_ts_data *ts_data, int bit, bool enable)
 }
 
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-static struct xiaomi_touch_interface xiaomi_touch_interfaces;
 
 static void fts_read_palm_data(u8 reg_value)
 {
@@ -2262,6 +2263,13 @@ static void fts_init_touch_mode_data(struct fts_ts_data *ts_data)
 	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][GET_CUR_VALUE] =
 		2;
 
+	/* Report Rate */
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_MAX_VALUE] = 0xFF;
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_MIN_VALUE] = 0x01;
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_DEF_VALUE] = 0x14;
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][SET_CUR_VALUE] = 0x14;
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_CUR_VALUE] = 0x14;
+
 	FTS_INFO("touchfeature value init done");
 
 	return;
@@ -2323,7 +2331,7 @@ static void fts_restore_mode_value(int mode, int value_type)
 static void fts_restore_normal_mode(void)
 {
 	int i;
-	for (i = 0; i < Touch_Report_Rate; i++) {
+	for (i = 0; i < Touch_Mode_NUM; i++) {
 		if (i != Touch_Panel_Orientation)
 			fts_restore_mode_value(i, GET_DEF_VALUE);
 	}
@@ -2422,6 +2430,18 @@ static void fts_update_touchmode_data(struct fts_ts_data *ts_data)
 			xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE] =
 				xiaomi_touch_interfaces
 					.touch_mode[mode][SET_CUR_VALUE];
+		}
+	}
+
+	mode = Touch_Report_Rate;
+	mode_set_value = xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE];
+	if (mode_set_value != xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE]) {
+		ret = fts_write_reg(FTS_REG_REPORT_RATE, mode_set_value);
+		if (ret < 0) {
+			FTS_ERROR("write touch report rate error, ret=%d", ret);
+		} else {
+			FTS_INFO("write touch report rate: %d (0x%02X)", mode_set_value, mode_set_value);
+			xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE] = mode_set_value;
 		}
 	}
 
