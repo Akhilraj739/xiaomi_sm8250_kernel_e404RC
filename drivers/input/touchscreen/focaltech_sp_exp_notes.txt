@@ -22,6 +22,19 @@ Based on hardware testing, Register 0x88 acts as a timing multiplier:
 | 0x14      | echo 8820    | 333 - 500 Hz   | Stable Turbo (Current "Pro" Default)    |
 | 0x1C      | echo 8814    | 200 - 250 Hz   | Balanced Gaming                          |
 
+8801 to 8806 = 50-52hz sp , 
+8807 = 58-62hz sp , 
+8808 = 66-71hz sp ,
+8809 = 71-76hz sp , 
+8810 = 142hz sp , 
+8811 = 166hz  sp ,
+8812 = 142-166hz sp ,
+8813 = 166hz sp and a burst of 200hz sp  ,
+8814 = 200-250hz sp ,
+8815-8816-8817-8818 = same 200-250hz sp ,
+8819 = 250-333hz sp ,
+8820 = 333hz sp and a brust 500hz sp , 
+8821 to 8824 same 333hz sp and a brust 500hz sp ,
 ---
 
 ## 3. Anti-Throttling Registers
