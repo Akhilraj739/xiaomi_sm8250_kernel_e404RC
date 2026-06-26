@@ -19,8 +19,8 @@ Based on hardware testing, Register 0x88 acts as a timing multiplier:
 | :---      | :---         | :---           | :---                                     |
 | 0x01-0x06 | echo 8801    | 50 - 52 Hz     | Economy/Idle (Avoid these for gaming)    |
 | 0x0B      | echo 8811    | 166 Hz         | Native High Speed (Most stable)          |
-| 0x14      | echo 8814    | 333 - 500 Hz   | Stable Turbo (Current "Pro" Default)    |
-| 0x1C      | echo 881C    | 200 - 250 Hz   | Balanced Gaming                          |
+| 0x14      | echo 8820    | 333 - 500 Hz   | Stable Turbo (Current "Pro" Default)    |
+| 0x1C      | echo 8814    | 200 - 250 Hz   | Balanced Gaming                          |
 
 ---
 
