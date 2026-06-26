@@ -1,0 +1,57 @@
+# Focaltech Touch Configuration
+
+This document summarizes the testing results and implementation details for the touch configuration on the Poco F4 (Focaltech IC).
+
+## 1. Driver Interface Path
+Use this path in Termux (as root) to interact with the touch controller manually:
+Path: /sys/devices/platform/soc/990000.spi/spi_master/spi1.0/spi1.0/fts_rw_reg
+
+Shortcut:
+su
+REG=/sys/devices/platform/soc/990000.spi/spi_master/spi1.0/spi1.0/fts_rw_reg
+
+---
+
+## 2. Sampling Rate Scaling (Register 0x88)
+Based on hardware testing, Register 0x88 acts as a timing multiplier:
+
+| Hex Value | Command      | Sampling Rate  | Note                                     |
+| :---      | :---         | :---           | :---                                     |
+| 0x01-0x06 | echo 8801    | 50 - 52 Hz     | Economy/Idle (Avoid these for gaming)    |
+| 0x0B      | echo 8811    | 166 Hz         | Native High Speed (Most stable)          |
+| 0x14      | echo 8814    | 333 - 500 Hz   | Stable Turbo (Current "Pro" Default)    |
+| 0x1C      | echo 881C    | 200 - 250 Hz   | Balanced Gaming                          |
+
+---
+
+## 3. Anti-Throttling Registers
+To prevent the "52Hz drop," these registers are locked in the source:
+
+* Register 0x86 (Monitor Mode):
+  - 0x00: Always Active (Forces high speed constantly)
+  - 0x01: Auto-Sleep (Default - causes the 52Hz drop)
+
+* Register 0x87 (Idle Timeout):
+  - 0xFF: Maximized delay to prevent entering low-power states.
+
+---
+
+## 4. Manual Commands
+
+### To CHECK a value (Read):
+1. echo 88 > $REG
+2. cat $REG
+
+### To CHANGE a value (Write):
+The format is [Register][Value] in Hex.
+* Set 333Hz Turbo: echo 8814 > $REG
+* Set 166Hz Native: echo 880B > $REG
+* Verify Anti-Throttle: echo 86 > $REG && cat $REG (Should be 0x00)
+
+---
+
+## 5. Software Logic (Shield Zone)
+* Shield Window: 6ms (Bridges 2.15 hardware cycles at 360Hz).
+* Janitor Worker: 7ms (Cleans up expired slots).
+* Warp Guard: 500px filter (Detects ID hijacking and kills old touch instantly).
+* Math: Manual absolute value (dx < 0 ? -dx : dx) used for kernel compatibility.
