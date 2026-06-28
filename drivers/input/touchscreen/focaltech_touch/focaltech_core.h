@@ -147,7 +147,6 @@ struct fts_ts_data {
 	struct work_struct fwupg_work;
 	struct delayed_work esdcheck_work;
 	struct delayed_work prc_work;
-	struct delayed_work release_work;
  	struct regulator *vsp;
 	struct regulator *vsn;
 	struct regulator *vddio;
@@ -158,11 +157,7 @@ struct fts_ts_data {
 	bool suspended;
 	bool fw_loading;
 	bool irq_disabled;
-	int last_x[FTS_MAX_POINTS_SUPPORT];
-	int last_y[FTS_MAX_POINTS_SUPPORT];
-	int last_state[FTS_MAX_POINTS_SUPPORT];
-	bool is_released[FTS_MAX_POINTS_SUPPORT];
-	unsigned long last_touch_time[FTS_MAX_POINTS_SUPPORT];
+	u8 report_rate;
 	/*
 	  *when fod unlock, release all points to avoid lose point up_action
 	  */

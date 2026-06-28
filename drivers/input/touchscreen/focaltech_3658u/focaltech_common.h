@@ -72,6 +72,7 @@
 /*register address*/
 #define FTS_REG_INT_CNT                     0x8F
 #define FTS_REG_FLOW_WORK_CNT               0x91
+#define FTS_REG_REPORT_RATE                 0x88
 #define FTS_REG_WORKMODE                    0x00
 #define FTS_REG_WORKMODE_FACTORY_VALUE      0x40
 #define FTS_REG_WORKMODE_WORK_VALUE         0x00
@@ -103,7 +104,6 @@
 #define FTS_REG_TIME_ENTER_MONITOR          0x87
 #define FTS_REG_ORIENTATION                 0x8c
 #define FTS_REG_EDGE_FILTER_LEVEL           0x9c
-#define FTS_REG_REPORT_RATE                 0x88
 #define FTS_REG_GAMEMODE                    0xc1
 
 #define FTS_PALM_EN                         0x9a

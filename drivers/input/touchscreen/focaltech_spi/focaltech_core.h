@@ -202,6 +202,7 @@ struct fts_ts_data {
 	bool glove_mode;
 	bool cover_mode;
 	bool charger_mode;
+	u8 report_rate;
 	bool gesture_mode; /* gesture enable or disable, default: disable */
 	/* multi-touch */
 	struct ts_event *events;
@@ -243,12 +244,6 @@ struct fts_ts_data {
 	bool power_status;
 	bool is_expert_mode;
 #endif
-	unsigned long last_touch_time[FTS_MAX_POINTS_SUPPORT];
-	int last_state[FTS_MAX_POINTS_SUPPORT];
-	int last_x[FTS_MAX_POINTS_SUPPORT];
-	int last_y[FTS_MAX_POINTS_SUPPORT];
-	bool is_released[FTS_MAX_POINTS_SUPPORT];
-	struct delayed_work release_work;
 };
 
 enum GESTURE_MODE_TYPE {
