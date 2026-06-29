@@ -776,14 +776,12 @@ static ssize_t fts_tprwreg_store(struct device *dev, struct device_attribute *at
 				rw_op.res = fts_i2c_write_reg(client, reg, val);
 				if (rw_op.res == 0 && reg == FTS_REG_REPORT_RATE) {
 					fts_data->report_rate = val;
-					printk(KERN_ERR "[FTS_TS] Saved report rate 0x%02X for recovery\n", val);
 				}
 			} else {
 				rw_op.res = fts_i2c_write(client, rw_op.opbuf, rw_op.len);
 				if (rw_op.res == 0 && rw_op.opbuf &&
 				    rw_op.opbuf[0] == FTS_REG_REPORT_RATE) {
 					fts_data->report_rate = rw_op.opbuf[1];
-					printk(KERN_ERR "[FTS_TS] Saved report rate 0x%02X for recovery (multi-byte)\n", rw_op.opbuf[1]);
 				}
 			}
 			if (rw_op.res < 0) {

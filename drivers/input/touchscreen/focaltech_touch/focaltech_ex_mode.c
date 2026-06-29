@@ -345,6 +345,16 @@ static struct attribute_group fts_touch_mode_group = {
 	.attrs = fts_touch_mode_attrs,
 };
 
+static void fts_report_rate_work_func(struct work_struct *work)
+{
+	struct fts_ts_data *ts_data =
+		container_of(work, struct fts_ts_data, report_rate_work.work);
+
+	if (ts_data->report_rate != 0) {
+		fts_i2c_write_reg(ts_data->client, FTS_REG_REPORT_RATE, ts_data->report_rate);
+	}
+}
+
 int fts_ex_mode_init(struct i2c_client *client)
 {
 	int err = 0;
@@ -352,6 +362,8 @@ int fts_ex_mode_init(struct i2c_client *client)
 	g_fts_mode_flag.fts_glove_mode_flag = false;
 	g_fts_mode_flag.fts_cover_mode_flag = false;
 	g_fts_mode_flag.fts_charger_mode_flag = false;
+	fts_data->report_rate = 0;
+	INIT_DELAYED_WORK(&fts_data->report_rate_work, fts_report_rate_work_func);
 
 	err = sysfs_create_group(&client->dev.kobj, &fts_touch_mode_group);
 	if (0 != err) {
@@ -393,29 +405,9 @@ int fts_ex_mode_recovery(struct i2c_client *client)
 #endif
 
 	if (fts_data->report_rate != 0) {
-		int i;
-		u8 check_val = 0;
-		printk(KERN_ERR "[FTS_TS] Restoring report rate to 0x%02X\n", fts_data->report_rate);
-
-		for (i = 0; i < 3; i++) {
-			msleep(50);
-			fts_i2c_write_reg(client, FTS_REG_WORKMODE, FTS_REG_WORKMODE_WORK_VALUE);
-			msleep(20);
-			ret = fts_i2c_write_reg(client, FTS_REG_REPORT_RATE, fts_data->report_rate);
-			if (ret == 0) {
-				msleep(10);
-				fts_i2c_read_reg(client, FTS_REG_REPORT_RATE, &check_val);
-				if (check_val == fts_data->report_rate) {
-					printk(KERN_ERR "[FTS_TS] Report rate restored and verified: 0x%02X\n", check_val);
-					break;
-				} else {
-					printk(KERN_ERR "[FTS_TS] Report rate verify failed! IC has 0x%02X, expected 0x%02X (attempt %d)\n",
-						check_val, fts_data->report_rate, i+1);
-				}
-			} else {
-				printk(KERN_ERR "[FTS_TS] Failed to write report rate, ret=%d (attempt %d)\n", ret, i+1);
-			}
-		}
+		queue_delayed_work(fts_data->ts_workqueue,
+				   &fts_data->report_rate_work,
+				   msecs_to_jiffies(2000));
 	}
 
 	return ret;

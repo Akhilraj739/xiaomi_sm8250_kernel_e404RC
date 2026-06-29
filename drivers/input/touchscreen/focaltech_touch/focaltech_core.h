@@ -145,6 +145,7 @@ struct fts_ts_data {
 	struct ts_ic_info ic_info;
 	struct workqueue_struct *ts_workqueue;
 	struct work_struct fwupg_work;
+	struct delayed_work report_rate_work;
 	struct delayed_work esdcheck_work;
 	struct delayed_work prc_work;
  	struct regulator *vsp;

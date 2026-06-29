@@ -262,10 +262,18 @@ static struct attribute_group fts_touch_mode_group = {
 	.attrs = fts_touch_mode_attrs,
 };
 
+static void fts_report_rate_work_func(struct work_struct *work)
+{
+	struct fts_ts_data *ts_data =
+		container_of(work, struct fts_ts_data, report_rate_work.work);
+
+	if (ts_data->report_rate != 0) {
+		fts_write_reg(FTS_REG_REPORT_RATE, ts_data->report_rate);
+	}
+}
+
 int fts_ex_mode_recovery(struct fts_ts_data *ts_data)
 {
-	int ret = 0;
-
 	if (ts_data->glove_mode) {
 		fts_ex_mode_switch(MODE_GLOVE, ENABLE);
 	}
@@ -279,29 +287,9 @@ int fts_ex_mode_recovery(struct fts_ts_data *ts_data)
 	}
 
 	if (ts_data->report_rate != 0) {
-		int i;
-		u8 check_val = 0;
-		printk(KERN_ERR "[FTS_TS] Restoring report rate to 0x%02X\n", ts_data->report_rate);
-
-		for (i = 0; i < 3; i++) {
-			msleep(50);
-			fts_write_reg(FTS_REG_WORKMODE, FTS_REG_WORKMODE_WORK_VALUE);
-			msleep(20);
-			ret = fts_write_reg(FTS_REG_REPORT_RATE, ts_data->report_rate);
-			if (ret == 0) {
-				msleep(10);
-				fts_read_reg(FTS_REG_REPORT_RATE, &check_val);
-				if (check_val == ts_data->report_rate) {
-					printk(KERN_ERR "[FTS_TS] Report rate restored and verified: 0x%02X\n", check_val);
-					break;
-				} else {
-					printk(KERN_ERR "[FTS_TS] Report rate verify failed! IC has 0x%02X, expected 0x%02X (attempt %d)\n",
-						check_val, ts_data->report_rate, i+1);
-				}
-			} else {
-				printk(KERN_ERR "[FTS_TS] Failed to write report rate, ret=%d (attempt %d)\n", ret, i+1);
-			}
-		}
+		queue_delayed_work(ts_data->ts_workqueue,
+				   &ts_data->report_rate_work,
+				   msecs_to_jiffies(2000));
 	}
 
 	return 0;
@@ -315,6 +303,7 @@ int fts_ex_mode_init(struct fts_ts_data *ts_data)
 	ts_data->cover_mode = DISABLE;
 	ts_data->charger_mode = DISABLE;
 	ts_data->report_rate = 0;
+	INIT_DELAYED_WORK(&ts_data->report_rate_work, fts_report_rate_work_func);
 
 	ret = sysfs_create_group(&ts_data->dev->kobj, &fts_touch_mode_group);
 	if (ret < 0) {
