@@ -50,7 +50,6 @@
 #include <linux/mutex.h>
 #include <linux/wait.h>
 #include <linux/time.h>
-#include <linux/ktime.h>
 #include <linux/workqueue.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
@@ -146,9 +145,9 @@ struct fts_ts_data {
 	struct ts_ic_info ic_info;
 	struct workqueue_struct *ts_workqueue;
 	struct work_struct fwupg_work;
+	struct delayed_work report_rate_work;
 	struct delayed_work esdcheck_work;
 	struct delayed_work prc_work;
-	struct delayed_work release_work;
  	struct regulator *vsp;
 	struct regulator *vsn;
 	struct regulator *vddio;
@@ -159,14 +158,7 @@ struct fts_ts_data {
 	bool suspended;
 	bool fw_loading;
 	bool irq_disabled;
-	int last_x[FTS_MAX_POINTS_SUPPORT];
-	int last_y[FTS_MAX_POINTS_SUPPORT];
-	int last_state[FTS_MAX_POINTS_SUPPORT];
-	bool is_released[FTS_MAX_POINTS_SUPPORT];
-	unsigned long last_touch_time[FTS_MAX_POINTS_SUPPORT];
-	ktime_t last_report_time;
-	u32 report_rate_hz;
-	struct delayed_work release_work;
+	u8 report_rate;
 	/*
 	  *when fod unlock, release all points to avoid lose point up_action
 	  */
