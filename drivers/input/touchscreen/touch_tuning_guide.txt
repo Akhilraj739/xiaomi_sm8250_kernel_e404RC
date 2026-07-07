@@ -1,0 +1,54 @@
+# Xiaomi/FocalTech Touch Tuning Guide
+
+## 1. Technical Breakdown of the Issue
+The "delay" felt during slow aim adjustments while using a 4-finger claw grip (Crouch + Scope + Fire + Aim) is caused by three main factors:
+
+* **Touch Hysteresis (Deadzone):** The driver ignores movement smaller than a certain pixel threshold to prevent jitter. Slow movements stay inside this deadzone longer, causing a delay.
+* **Tap Stability Filtering:** When other fingers tap (Fire/Crouch), the firmware "stiffens" the coordinates of the aim finger to prevent accidental twitches. This filters out micro-adjustments.
+* **Low Power Mode (LPM) Latency:** The system tries to enter low-power states between touch scans. Waking up adds a few milliseconds of delay to every initial movement.
+
+---
+
+## 2. The FocalTech Configuration Packet (0xC1)
+Most Xiaomi devices use a 7-byte command block to control real-time performance.
+
+**Command Format:** `[Address: C1] [Data: 6 Bytes]`
+
+| Byte | Name | Meaning | Recommended (Raw/Gaming) |
+| :--- | :--- | :--- | :--- |
+| 1 | Game Mode | 00=Off, 01=On (High Speed) | 01 |
+| 2 | Active Mode | 03=Standard, 1E (30)=Ultra | 1E |
+| 3 | Tolerance | Move Threshold / Deadzone | 01 (Minimum) |
+| 4 | Threshold | Tap Sensitivity / Pressure | 01 (Highest) |
+| 5 | Aim Sensitivity | Tracking Movement Ratio | 01 (Raw) |
+| 6 | Tap Stability | Stabilization Filter | 01 (None/Raw) |
+
+---
+
+## 3. Active Mode Explained
+Active Mode (Byte 2) controls the Scanning Frequency and Power Management:
+* **Value 0x03 (3):** Standard gaming value.
+* **Value 0x1E (30):** Keeps the hardware in a high-power, high-frequency state for a longer period (30ms). This eliminates "wake-up" latency between taps.
+
+---
+
+## 4. Manual Tuning via fts_rw_reg
+You can manually push these settings to the hardware using the `rw_reg` node in sysfs.
+
+**The "Perfect" Raw Gaming Command:**
+`echo 0C106011E01010101 > rw_reg`
+
+* **0**: Write Flag
+* **C1**: Address
+* **06**: Length
+* **01**: Game Mode On
+* **1E**: Active Mode (Ultra)
+* **01**: Tolerance (Min)
+* **01**: Threshold (Min)
+* **01**: Aim Sens (Min)
+* **01**: Tap Stability (Min)
+
+**Individual Register Tweak (Older Chips):**
+* **Sampling Rate (0x88):** `echo 8807 > rw_reg` (Maximum frequency)
+* **Sensitivity (0x81):** `echo 8101 > rw_reg`
+* **Deadzone (0x85):** `echo 8501 > rw_reg`
