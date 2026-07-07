@@ -49,6 +49,6 @@ You can manually push these settings to the hardware using the `rw_reg` node in 
 * **01**: Tap Stability (Min)
 
 **Individual Register Tweak (Older Chips):**
-* **Sampling Rate (0x88):** `echo 8807 > rw_reg` (Maximum frequency)
+* **Sampling Rate (0x88):** `echo 88FF > rw_reg` (Maximum frequency)
 * **Sensitivity (0x81):** `echo 8101 > rw_reg`
 * **Deadzone (0x85):** `echo 8501 > rw_reg`
