@@ -32,67 +32,6 @@ K_DTB="$KERNEL_DIR/out/arch/arm64/boot/dtb"
 AK3_DIR="$BASE_DIR/AnyKernel3"
 [[ ! -d "$AK3_DIR" ]] && echo "--- ! Failed to find AnyKernel3 at $AK3_DIR ! ---" && exit 1
 
-# Telegram API setup
-TELEGRAM_CONFIG="$BASE_DIR/telegram_api"
-if [[ ! -f "$TELEGRAM_CONFIG" ]]; then
-    echo "--- ! Failed to find Telegram API config at $TELEGRAM_CONFIG ! ---"
-    exit 1
-else
-    source "$TELEGRAM_CONFIG"
-    if [[ -z "$BOT_TOKEN" || -z "$GROUP_ID" || -z "$CHANNEL_ID" || -z "$PRIVATE_ID" ]]; then
-        echo "--- ! Failed to find Telegram required variables (BOT_TOKEN, GROUP_ID, CHANNEL_ID, PRIVATE_ID) ! ---"
-        exit 1
-    fi
-fi
-
-MSGTARGET="private"
-
-for arg in "$@"; do
-    case "$arg" in
-        weekly) MSGTARGET="channel" ;;
-        group) MSGTARGET="group" ;;
-    esac
-done
-
-case "$MSGTARGET" in
-    channel) ID="$CHANNEL_ID" ;;
-    group)   ID="$GROUP_ID" ;;
-    *)       ID="$PRIVATE_ID" ;;
-esac
-
-send_msg() {
-    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
-        -d chat_id="$ID" \
-        -d text="$1" \
-        -d parse_mode=html >/dev/null
-}
-
-send_file() {
-    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendDocument" \
-        -F chat_id="$ID" \
-        -F document=@"$1" >/dev/null
-}
-
-send_changelog() {
-    local FILE="$1"
-
-    if [[ ! -f "$FILE" ]]; then
-        echo "--- ! Failed to find changelog at $FILE ! ---"
-        return
-    fi
-
-    # If empty, use default
-    if [[ ! -s "$FILE" ]]; then
-        echo "- Another weekly build" > "$FILE"
-    fi
-
-    # Proper newline → Telegram format
-    local CHANGELOG
-    CHANGELOG=$(sed 's/$/%0A/' "$FILE" | tr -d '\n')
-
-    send_msg "<b>Changelog(s):</b>%0A<code>$CHANGELOG</code>"
-}
-
 # Arrays to support multi-device target
 TARGETS=()
 DEFCONFIGS=()
@@ -103,33 +42,15 @@ ZIPS=()
 if [[ "$*" == *gcc* ]]; then
     declare -A DEVICE_MAP=(
         ["munch"]="MUNCH:vendor/munch_gcc_defconfig"
-        ["alioth"]="ALIOTH:vendor/alioth_gcc_defconfig"
-        ["apollo"]="APOLLO:vendor/apollo_gcc_defconfig"
-        ["pipa"]="PIPA:vendor/pipa_gcc_defconfig"
-        ["lmi"]="LMI:vendor/lmi_gcc_defconfig"
-        ["umi"]="UMI:vendor/umi_gcc_defconfig"
-        ["cmi"]="CMI:vendor/cmi_gcc_defconfig"
-        ["cas"]="CAS:vendor/cas_gcc_defconfig"
     )
 else
     declare -A DEVICE_MAP=(
         ["munch"]="MUNCH:vendor/munch_defconfig"
-        ["alioth"]="ALIOTH:vendor/alioth_defconfig"
-        ["apollo"]="APOLLO:vendor/apollo_defconfig"
-        ["pipa"]="PIPA:vendor/pipa_defconfig"
-        ["lmi"]="LMI:vendor/lmi_defconfig"
-        ["umi"]="UMI:vendor/umi_defconfig"
-        ["cmi"]="CMI:vendor/cmi_defconfig"
-        ["cas"]="CAS:vendor/cas_defconfig"
     )
 fi
 
 declare -A DEVICE_NAME_MAP=(
     ["munch"]="POCO_F4"
-    ["alioth"]="POCO_F3"
-    ["apollo"]="MI_10T"
-    ["lmi"]="POCO_F2"
-    ["pipa"]="MI_PAD6"
 )
 
 # Toolchain selection
@@ -236,28 +157,12 @@ if [[ $# -gt 0 ]]; then
     FAIL=0
     for i in "${!TARGETS[@]}"; do
         if ! build_device "${TARGETS[$i]}" "${DEFCONFIGS[$i]}" "${DEVICES[$i]}"; then
-            send_msg "<b>Kernel Weekly Build $(date "+%Y-%m-%d")</b>%0A<b>Branch: </b><code>$BRANCH</code>"
-            send_file "$LOG_FILE"
-            send_msg "<b>! Kernel Build Failed !</b>"
             echo "--- ! Failed to build ${TARGETS[$i]} kernel ! ---"
             FAIL=1
         fi
     done
 
     if [[ $FAIL -eq 0 ]]; then
-        echo "--- Uploading builds ---"
-        send_msg "<b>Kernel Weekly Build $(date "+%Y-%m-%d")</b>%0A<b>Branch: </b><code>$BRANCH</code>"
-
-        for zip in "${ZIPS[@]}"; do
-            if ! send_file "$zip"; then
-                echo "--- ! Failed to upload $zip ! ---"
-            else
-                echo "--- Uploaded $zip ---"
-            fi
-        done
-        if [[ "$*" == *changelog* ]]; then
-            send_changelog "$CHANGELOG_FILE"
-        fi
         echo "--- All builds completed ---"
     fi
 
