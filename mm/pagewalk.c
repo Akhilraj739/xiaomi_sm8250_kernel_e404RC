@@ -118,7 +118,7 @@ static int walk_pud_range(p4d_t *p4d, unsigned long addr, unsigned long end,
 }
 
 static int walk_p4d_range(pgd_t *pgd, unsigned long addr, unsigned long end,
-			  struct mm_walk *walk)
+                          struct mm_walk *walk)
 {
 	p4d_t *p4d;
 	unsigned long next;
@@ -135,6 +135,8 @@ static int walk_p4d_range(pgd_t *pgd, unsigned long addr, unsigned long end,
 				break;
 			continue;
 		}
+
+		/* 4.19 architecture processes callbacks directly via ops pointer */
 		if (ops->pmd_entry || ops->pte_entry)
 			err = walk_pud_range(p4d, addr, next, walk);
 		if (err)
@@ -145,7 +147,7 @@ static int walk_p4d_range(pgd_t *pgd, unsigned long addr, unsigned long end,
 }
 
 static int walk_pgd_range(unsigned long addr, unsigned long end,
-			  struct mm_walk *walk)
+                          struct mm_walk *walk)
 {
 	pgd_t *pgd;
 	unsigned long next;
@@ -162,6 +164,8 @@ static int walk_pgd_range(unsigned long addr, unsigned long end,
 				break;
 			continue;
 		}
+
+		/* 4.19 reads callback handlers directly through the ops pointer */
 		if (ops->pmd_entry || ops->pte_entry)
 			err = walk_p4d_range(pgd, addr, next, walk);
 		if (err)
