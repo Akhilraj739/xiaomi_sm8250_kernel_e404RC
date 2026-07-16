@@ -1360,6 +1360,29 @@ static void fuse_fs_cleanup(void)
 }
 
 static struct kobject *fuse_kobj;
+static struct kobject *fuse_features_kobj;
+
+static ssize_t fuse_feature_show(struct kobject *kobj,
+				 struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "supported\n");
+}
+
+static struct kobj_attribute passthrough_feature_attr =
+	__ATTR(passthrough, 0444, fuse_feature_show, NULL);
+
+static struct kobj_attribute fuse_bpf_feature_attr =
+	__ATTR(fuse_bpf, 0444, fuse_feature_show, NULL);
+
+static struct attribute *fuse_features_attrs[] = {
+	&passthrough_feature_attr.attr,
+	&fuse_bpf_feature_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group fuse_features_group = {
+	.attrs = fuse_features_attrs,
+};
 
 static int fuse_sysfs_init(void)
 {
@@ -1375,8 +1398,22 @@ static int fuse_sysfs_init(void)
 	if (err)
 		goto out_fuse_unregister;
 
+	fuse_features_kobj = kobject_create_and_add("features", fuse_kobj);
+	if (!fuse_features_kobj) {
+		err = -ENOMEM;
+		goto out_connections_unregister;
+	}
+
+	err = sysfs_create_group(fuse_features_kobj, &fuse_features_group);
+	if (err)
+		goto out_features_unregister;
+
 	return 0;
 
+out_features_unregister:
+	kobject_put(fuse_features_kobj);
+out_connections_unregister:
+	sysfs_remove_mount_point(fuse_kobj, "connections");
  out_fuse_unregister:
 	kobject_put(fuse_kobj);
  out_err:
@@ -1385,6 +1422,8 @@ static int fuse_sysfs_init(void)
 
 static void fuse_sysfs_cleanup(void)
 {
+	sysfs_remove_group(fuse_features_kobj, &fuse_features_group);
+	kobject_put(fuse_features_kobj);
 	sysfs_remove_mount_point(fuse_kobj, "connections");
 	kobject_put(fuse_kobj);
 }
