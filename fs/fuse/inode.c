@@ -931,6 +931,7 @@ static void process_init_reply(struct fuse_conn *fc, struct fuse_req *req)
 				fc->abort_err = 1;
 			if (arg->flags & FUSE_PASSTHROUGH) {
 				fc->passthrough = 1;
+				pr_info("E404: FUSE Passthrough enabled for connection %p\n", fc);
 				/* Prevent further stacking */
 				fc->sb->s_stack_depth =
 					FILESYSTEM_MAX_STACK_DEPTH;
