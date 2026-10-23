@@ -1976,6 +1976,13 @@ static void fts_init_touch_mode_data(struct fts_ts_data *ts_data)
 	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][SET_CUR_VALUE] = 2;
 	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][GET_CUR_VALUE] = 2;
 
+	/* Report Rate */
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_MAX_VALUE] = 3;
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_MIN_VALUE] = 0;
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_DEF_VALUE] = 0;
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][SET_CUR_VALUE] = 0;
+	xiaomi_touch_interfaces.touch_mode[Touch_Report_Rate][GET_CUR_VALUE] = 0;
+
 	FTS_INFO("touchfeature value init done");
 
 	return;
@@ -2095,6 +2102,21 @@ static void fts_update_touchmode_data(struct fts_ts_data *ts_data)
 	mode_set_value = xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE];
 	if (mode_set_value != xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE]) {
 		mode_addr = FTS_REG_EDGE_FILTER_LEVEL;
+		ret = fts_write_reg(mode_addr, mode_set_value);
+		if (ret < 0) {
+			FTS_ERROR("write touch mode:%d reg failed", mode);
+		} else {
+			FTS_INFO("write touch mode:%d, value: %d, addr:0x%02X",
+				mode, mode_set_value, mode_addr);
+			xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE] =
+				xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE];
+		}
+	}
+
+	mode = Touch_Report_Rate;
+	mode_set_value = xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE];
+	if (mode_set_value != xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE]) {
+		mode_addr = FTS_REG_REPORT_RATE;
 		ret = fts_write_reg(mode_addr, mode_set_value);
 		if (ret < 0) {
 			FTS_ERROR("write touch mode:%d reg failed", mode);
