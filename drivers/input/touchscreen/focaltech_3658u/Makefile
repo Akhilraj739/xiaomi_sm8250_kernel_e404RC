@@ -4,6 +4,7 @@ ifneq ($(KERNELRELEASE),)
                          focaltech_ex_fun.o \
                          focaltech_ex_mode.o \
                          focaltech_gesture.o \
+                         focaltech_esdcheck.o \
                          focaltech_spi.o \
                          focaltech_flash.o \
                          focaltech_flash/focaltech_upgrade_ft3658u.o
