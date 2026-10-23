@@ -41,7 +41,7 @@
 * Private constant and macro definitions using #define
 *****************************************************************************/
 #define SPI_RETRY_NUMBER            3
-#define CS_HIGH_DELAY               150 /* unit: us */
+#define CS_HIGH_DELAY               15 /* unit: us */
 #define SPI_BUF_LENGTH              256
 
 #define DATA_CRC_EN                 0x20
