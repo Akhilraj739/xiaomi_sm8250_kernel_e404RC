@@ -723,6 +723,10 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
 	}
 
 	if (data->touch_point == 0) {
+		if (data->touchs) {
+			FTS_DEBUG("touch_point is 0, release previous touches (0x%x)", data->touchs);
+			return 0;
+		}
 		FTS_INFO("no touch point information");
 		return -EIO;
 	}
