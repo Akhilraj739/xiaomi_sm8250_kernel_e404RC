@@ -43,7 +43,7 @@
 #define SPI_RETRY_NUMBER            3
 #define CS_HIGH_DELAY               15 /* unit: us */
 #define SPI_BUF_LENGTH              256
-
+#define SPI_STATUS_ERROR_MASK       0xA0
 #define DATA_CRC_EN                 0x20
 #define WRITE_CMD                   0x00
 #define READ_CMD                    (0x80 | DATA_CRC_EN)
@@ -106,6 +106,9 @@ static void crckermit(u8 *data, u32 len, u16 *crc_out)
 	u32 j = 0;
 	u16 crc = 0xFFFF;
 
+	if (!data || !crc_out || !len)
+		return;
+
 	for (i = 0; i < len; i++) {
 		crc ^= data[i];
 		for (j = 0; j < 8; j++) {
@@ -151,14 +154,14 @@ int fts_write(u8 *writebuf, u32 writelen)
 
 	mutex_lock(&ts_data->bus_lock);
 	if (txlen_need > SPI_BUF_LENGTH) {
-		txbuf = kzalloc(txlen_need, GFP_KERNEL);
+		txbuf = kzalloc(txlen_need, GFP_ATOMIC);
 		if (NULL == txbuf) {
 			FTS_ERROR("txbuf malloc fail");
 			ret = -ENOMEM;
 			goto err_write;
 		}
 
-		rxbuf = kzalloc(txlen_need, GFP_KERNEL);
+		rxbuf = kzalloc(txlen_need, GFP_ATOMIC);
 		if (NULL == rxbuf) {
 			FTS_ERROR("rxbuf malloc fail");
 			ret = -ENOMEM;
@@ -183,7 +186,7 @@ int fts_write(u8 *writebuf, u32 writelen)
 
 	for (i = 0; i < SPI_RETRY_NUMBER; i++) {
 		ret = fts_spi_transfer(txbuf, rxbuf, txlen);
-		if ((0 == ret) && ((rxbuf[3] & 0xA0) == 0)) {
+		if ((0 == ret) && ((rxbuf[3] & SPI_STATUS_ERROR_MASK) == 0)) {
 			break;
 		} else {
 			FTS_DEBUG("data write(addr:%x),status:%x,retry:%d,ret:%d",
@@ -243,14 +246,14 @@ int fts_read(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen)
 
 	mutex_lock(&ts_data->bus_lock);
 	if (txlen_need > SPI_BUF_LENGTH) {
-		txbuf = kzalloc(txlen_need, GFP_KERNEL);
+		txbuf = kzalloc(txlen_need, GFP_ATOMIC);
 		if (NULL == txbuf) {
 			FTS_ERROR("txbuf malloc fail");
 			ret = -ENOMEM;
 			goto err_read;
 		}
 
-		rxbuf = kzalloc(txlen_need, GFP_KERNEL);
+		rxbuf = kzalloc(txlen_need, GFP_ATOMIC);
 		if (NULL == rxbuf) {
 			FTS_ERROR("rxbuf malloc fail");
 			ret = -ENOMEM;
@@ -275,7 +278,7 @@ int fts_read(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen)
 
 	for (i = 0; i < SPI_RETRY_NUMBER; i++) {
 		ret = fts_spi_transfer(txbuf, rxbuf, txlen);
-		if ((0 == ret) && ((rxbuf[3] & 0xA0) == 0)) {
+		if ((0 == ret) && ((rxbuf[3] & SPI_STATUS_ERROR_MASK) == 0)) {
 			memcpy(data, &rxbuf[dp], datalen);
 			/* crc check */
 			if (ctrl & DATA_CRC_EN) {
